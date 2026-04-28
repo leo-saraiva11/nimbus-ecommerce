@@ -21,7 +21,7 @@ Requer Python 3.11+.
 
 ```bash
 git clone <este-repo>
-cd recria-ai
+cd nimbus-ecommerce
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
