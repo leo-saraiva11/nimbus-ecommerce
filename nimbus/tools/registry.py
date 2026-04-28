@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from nimbus.tools.cart import CartState, add_to_cart, remove_from_cart, view_cart
 from nimbus.tools.catalog import get_product, load_products, search_products
@@ -21,15 +21,17 @@ class ToolContext:
     frete: dict[str, dict]
     cart: CartState
     pedidos_dir: Path
+    rag: Optional[Any] = None  # VectorStore — opcional pra facilitar testes
 
 
-def build_context(data_dir: Path, pedidos_dir: Path) -> ToolContext:
+def build_context(data_dir: Path, pedidos_dir: Path, rag: Optional[Any] = None) -> ToolContext:
     return ToolContext(
         produtos=load_products(data_dir / "produtos.csv"),
         cupons=load_coupons(data_dir / "cupons.csv"),
         frete=load_shipping(data_dir / "frete.csv"),
         cart=CartState(),
         pedidos_dir=pedidos_dir,
+        rag=rag,
     )
 
 
@@ -142,6 +144,28 @@ TOOL_SCHEMAS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_policies",
+            "description": (
+                "Consulta a base de conhecimento institucional da loja (políticas de "
+                "trocas e devoluções, formas de pagamento, entrega e rastreamento, "
+                "garantia e suporte). Use SEMPRE que o usuário fizer perguntas sobre "
+                "regras, prazos, processos ou dúvidas sobre como a loja funciona. "
+                "Retorna trechos relevantes com a fonte (nome do arquivo) — cite a "
+                "fonte na sua resposta no formato (fonte: nome_do_arquivo.md)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Pergunta ou termo de busca em linguagem natural"},
+                    "top_k": {"type": "integer", "description": "Número de trechos a retornar (padrão: 3)", "minimum": 1, "maximum": 5},
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 
@@ -186,4 +210,17 @@ def execute_tool(name: str, arguments: Any, ctx: ToolContext) -> Any:
             cupom=args.get("cupom"),
             out_dir=ctx.pedidos_dir,
         )
+    if name == "search_policies":
+        if ctx.rag is None:
+            raise ToolError("Base de conhecimento não disponível neste contexto")
+        top_k = int(args.get("top_k", 3))
+        hits = ctx.rag.search(args["query"], top_k=top_k)
+        return [
+            {
+                "fonte": h.chunk.source,
+                "score": round(float(h.score), 3),
+                "trecho": h.chunk.text,
+            }
+            for h in hits
+        ]
     raise ToolError(f"Tool desconhecida: {name}")

@@ -9,7 +9,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from nimbus.agent import Agent, AgentConfig
+from nimbus.llm.base import LLMError
 from nimbus.llm.groq_client import GroqClient
+from nimbus.llm.openrouter_client import OpenRouterClient
 from nimbus.rag.chunker import chunk_markdown
 from nimbus.rag.embeddings import SentenceTransformerEmbedder
 from nimbus.rag.store import VectorStore
@@ -53,12 +55,31 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "-d", "--debug",
         action="store_true",
         help=(
-            "Imprime trace completo de cada turno: chunks RAG recuperados (com score "
-            "e fonte), requisição/resposta do LLM (incluindo tool_calls com argumentos), "
-            "execução de cada tool (input, output completo, duração) e resposta final."
+            "Imprime trace completo de cada turno: chamada à tool de busca em "
+            "políticas (RAG), requisição/resposta do LLM (com tool_calls), "
+            "execução de cada tool (args, resultado completo, duração), tokens "
+            "consumidos por iteração + acumulado, e resposta final."
         ),
     )
+    parser.add_argument(
+        "--provider",
+        choices=["groq", "openrouter"],
+        default=None,
+        help="Provider de LLM (padrão: groq, ou NIMBUS_PROVIDER do .env).",
+    )
     return parser.parse_args(argv)
+
+
+def _build_llm(provider: str):
+    if provider == "groq":
+        if not os.environ.get("GROQ_API_KEY"):
+            raise LLMError("GROQ_API_KEY não definida no .env (veja .env.example).")
+        return GroqClient()
+    if provider == "openrouter":
+        if not os.environ.get("OPENROUTER_API_KEY"):
+            raise LLMError("OPENROUTER_API_KEY não definida no .env (veja .env.example).")
+        return OpenRouterClient()
+    raise LLMError(f"Provider desconhecido: {provider!r} (use 'groq' ou 'openrouter')")
 
 
 def main() -> None:
@@ -67,13 +88,16 @@ def main() -> None:
     debug = args.debug or bool(os.environ.get("NIMBUS_DEBUG"))
     _setup_logging(verbose=debug)
 
-    if not os.environ.get("GROQ_API_KEY"):
-        print("ERRO: defina GROQ_API_KEY no .env (veja .env.example).", file=sys.stderr)
+    provider = args.provider or os.environ.get("NIMBUS_PROVIDER", "groq")
+    try:
+        llm = _build_llm(provider)
+    except LLMError as e:
+        print(f"ERRO: {e}", file=sys.stderr)
         sys.exit(1)
 
     rag = _build_rag(debug=debug)
     agent = Agent(
-        llm=GroqClient(),
+        llm=llm,
         rag=rag,
         config=AgentConfig(debug=debug),
         data_dir=DATA_DIR,
@@ -81,7 +105,7 @@ def main() -> None:
         system_prompt_template=SYSTEM_PROMPT_PATH.read_text(encoding="utf-8"),
     )
 
-    banner = "Loja Nimbus — assistente virtual. Digite 'sair' para encerrar."
+    banner = f"Loja Nimbus — assistente virtual (provider: {provider}). Digite 'sair' para encerrar."
     if debug:
         banner += "  [modo DEBUG ligado: trace completo após cada pergunta]"
     print(banner + "\n")

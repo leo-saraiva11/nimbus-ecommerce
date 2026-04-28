@@ -1,18 +1,21 @@
-"""Cliente Groq adaptado pra interface LLMClient."""
+"""Cliente OpenRouter — usa o SDK da OpenAI apontando para a base_url da OpenRouter."""
 from __future__ import annotations
 import os
 
 from nimbus.llm.base import ChatResponse, LLMError, ToolCall, Usage
 
 
-class GroqClient:
+class OpenRouterClient:
     def __init__(self, model: str | None = None, api_key: str | None = None):
         try:
-            from groq import Groq
+            from openai import OpenAI
         except ImportError as e:
-            raise LLMError("Pacote `groq` não instalado") from e
-        self.model = model or os.environ.get("NIMBUS_MODEL", "llama-3.3-70b-versatile")
-        self._client = Groq(api_key=api_key or os.environ.get("GROQ_API_KEY"))
+            raise LLMError("Pacote `openai` não instalado (necessário para OpenRouter)") from e
+        self.model = model or os.environ.get("NIMBUS_MODEL", "meta-llama/llama-3.3-70b-instruct")
+        self._client = OpenAI(
+            api_key=api_key or os.environ.get("OPENROUTER_API_KEY"),
+            base_url="https://openrouter.ai/api/v1",
+        )
 
     def chat(self, messages: list[dict], tools: list[dict], timeout: float) -> ChatResponse:
         try:
@@ -24,7 +27,7 @@ class GroqClient:
                 timeout=timeout,
             )
         except Exception as e:
-            raise LLMError(f"Erro na chamada Groq: {e}") from e
+            raise LLMError(f"Erro na chamada OpenRouter: {e}") from e
 
         choice = resp.choices[0].message
         tool_calls = []
