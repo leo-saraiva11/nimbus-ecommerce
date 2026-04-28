@@ -25,20 +25,56 @@ cp .env.example .env
 ## Como rodar
 
 ```bash
-python -m nimbus
+python -m nimbus              # modo normal
+python -m nimbus --debug      # trace completo de cada turno
+python -m nimbus -d           # equivalente curto
 ```
 
 Primeiro start baixa o modelo de embeddings `all-MiniLM-L6-v2` (~80MB).
 
-Exemplo de sessão:
+### Modo `--debug`
+
+Imprime, a cada pergunta, um trace estruturado de tudo que o agente faz por baixo dos panos:
+
+- **RAG retrieval**: os chunks recuperados, com score e nome do arquivo de origem.
+- **Iterações do loop**: para cada iteração, a request ao LLM (nº de mensagens, tools, timeout) e a response (`content` + `tool_calls` com argumentos completos).
+- **Tools**: nome, args, **resultado completo sem truncamento**, duração e status (`ok`/`error`/`crash`).
+- **Resposta final** ao usuário.
+
+Exemplo de saída em modo debug:
+
 ```
-você> tenho até R$ 200, queria um mouse e um teclado
-Nimbus> Encontrei... [usa search_products] ...
-você> adiciona o Logitech G203 e o Redragon Kumara
-você> meu CEP é em SP, tem cupom?
-você> aplica BEMVINDO10 e fecha o pedido
-Nimbus> Relatório salvo em pedidos/pedido_20260428_153022.md, total R$ 384,12.
+══════════════════════════════════════════════════════════════════════
+  TURNO #1
+══════════════════════════════════════════════════════════════════════
+  USER: tem produtos da logitech?
+
+  ── RAG retrieval (top 3) ──────────────────────────────────────
+  [1] score=0.812  fonte=politica_trocas_devolucoes.md
+      Direito de arrependimento em 7 dias corridos para devoluções.
+  ...
+
+  ── Iteração 1 ─────────────────────────────────────────────────
+  → LLM request  (mensagens=2, tools=8, timeout=30.0s)
+  ← LLM response  (842ms)
+     content: (vazio)
+     tool_calls (1):
+       [t1] search_products({"query": "logitech"})
+  ⚙ TOOL search_products  (3ms, ok)
+     args:   {"query": "logitech"}
+     result: [{"id": "P001", "nome": "Mouse Gamer Logitech G203", ...}, ...]
+
+  ── Iteração 2 ─────────────────────────────────────────────────
+  → LLM request  (mensagens=4, tools=8, timeout=30.0s)
+  ← LLM response  (1124ms)
+     content: Encontrei 2 produtos Logitech: o Mouse G203 (R$ 159,90)...
+     tool_calls: (nenhuma)
+
+  ✓ FINAL: Encontrei 2 produtos Logitech: o Mouse G203 (R$ 159,90)...
+══════════════════════════════════════════════════════════════════════
 ```
+
+A flag também ativa logging em nível `INFO` no `logging` padrão (mesmo efeito de `NIMBUS_DEBUG=1`).
 
 ## Testes
 
@@ -63,7 +99,7 @@ O **loop do agente** está em `nimbus/agent.py:run_turn`. Ele é escrito à mão
 - `MAX_ITERATIONS = 5`
 - `LLM_TIMEOUT_S = 30`
 - `try/except ToolError` → erro estruturado (`{"error": "..."}`) devolvido ao modelo, que decide o próximo passo.
-- Logging estruturado (stdout via `logging`) de cada iteração: pergunta do usuário, tool_calls com argumentos, resultados das tools, resposta final. Liguar com `NIMBUS_DEBUG=1`.
+- Logging estruturado de cada iteração: pergunta do usuário, tool_calls com argumentos, resultados das tools, resposta final. Para inspecionar tudo em runtime, rode com `--debug` (ou `-d`) — ver seção acima.
 
 ## Tools disponíveis (8)
 
