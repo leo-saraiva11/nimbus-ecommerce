@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,16 +21,45 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 CORPUS_DIR = PROJECT_ROOT / "corpus"
 PEDIDOS_DIR = PROJECT_ROOT / "pedidos"
+LOGS_DIR = PROJECT_ROOT / "logs"
 SYSTEM_PROMPT_PATH = PROJECT_ROOT / "nimbus" / "prompts" / "system.md"
 
 
-def _setup_logging(verbose: bool) -> None:
-    level = logging.INFO if verbose else logging.WARNING
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+def _setup_logging(verbose: bool, logs_dir: Path = LOGS_DIR) -> Path:
+    """Configura console + arquivo. Retorna o caminho do arquivo de log da sessão.
+
+    - Console: nível INFO se `verbose`, senão WARNING (mantém terminal limpo).
+    - Arquivo `logs/session_<timestamp>.log`: SEMPRE em INFO, registra todos os
+      eventos de cada turno (USER, TOOL CALL, TOOL OK/ERROR, FINAL, etc.) com
+      timestamp completo. Um arquivo novo é criado por sessão CLI.
+    """
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_file = logs_dir / f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+    formatter_console = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    formatter_file = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setLevel(logging.INFO if verbose else logging.WARNING)
+    console_handler.setFormatter(formatter_console)
+
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter_file)
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)  # handlers filtram individualmente
+    root.handlers.clear()
+    root.addHandler(console_handler)
+    root.addHandler(file_handler)
+
+    return log_file
 
 
 def _build_rag(debug: bool) -> VectorStore:
@@ -86,7 +116,8 @@ def main() -> None:
     args = _parse_args()
     load_dotenv()
     debug = args.debug or bool(os.environ.get("NIMBUS_DEBUG"))
-    _setup_logging(verbose=debug)
+    log_file = _setup_logging(verbose=debug)
+    print(f"[setup] log da sessão: {log_file}", file=sys.stderr)
 
     provider = args.provider or os.environ.get("NIMBUS_PROVIDER", "groq")
     try:

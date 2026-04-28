@@ -82,7 +82,19 @@ Exemplo de saída em modo debug (pergunta institucional):
 ══════════════════════════════════════════════════════════════════════
 ```
 
-A flag também ativa logging em nível `INFO` no `logging` padrão (mesmo efeito de `NIMBUS_DEBUG=1`).
+A flag também sobe o nível do logger no console pra `INFO` (mesmo efeito de `NIMBUS_DEBUG=1`).
+
+### Logs em arquivo
+
+Cada sessão CLI grava um arquivo em `logs/session_YYYYMMDD_HHMMSS.log`, **sempre em nível `INFO`** (independente de `--debug`). O caminho é impresso na partida:
+
+```
+[setup] log da sessão: /caminho/recria-ai/logs/session_20260428_161631.log
+```
+
+O arquivo registra os 4 eventos exigidos pelo desafio para cada turno: pergunta do usuário (`USER:`), tool call do modelo (`TOOL CALL:` com args), resultado da tool (`TOOL OK/ERROR/CRASH:` com payload completo), resposta final (`FINAL:`). O console mantém o nível `WARNING` por padrão (limpo); usar `--debug` espelha tudo no terminal também.
+
+Os arquivos são gitignored (`logs/`) — nada vai pro repo.
 
 ## Testes
 
@@ -141,6 +153,25 @@ O **loop do agente** está em `nimbus/agent.py:run_turn`. Escrito à mão, sem L
 - ✅ Memória multi-turno (necessária pro fluxo de carrinho)
 - ✅ Citação de fonte no RAG (instruída no system prompt + retornada no payload da tool)
 - ✅ Tracking de tokens (`Usage` por response + acumulado por turno e sessão, exibido em modo debug)
+
+## Persistência (o que é local)
+
+Tudo é local exceto a chamada ao LLM:
+
+| O que | Onde | Persiste entre sessões? |
+|---|---|---|
+| Chamada ao LLM | Groq/OpenRouter API (rede) | — |
+| Modelo de embeddings | `~/.cache/huggingface/` (cache do `sentence-transformers`) | sim, baixado 1ª vez |
+| Vetores RAG | in-memory (`VectorStore`) | não — reindexado a cada start |
+| Catálogo, cupons, frete | `data/*.csv` | sim |
+| Corpus institucional | `corpus/*.md` | sim |
+| Conversa multi-turno | in-memory (`Agent.conversation`) | não — fora de escopo |
+| Carrinho | in-memory (`CartState`) | não — idem |
+| Relatório do pedido | `pedidos/pedido_<timestamp>.md` | sim (gitignored) |
+| Logs da sessão | `logs/session_<timestamp>.log` | sim (gitignored) |
+| API keys | `.env` | sim (gitignored) |
+
+Zero DB, zero cloud storage. Único tráfego de rede é a chamada HTTP pro LLM.
 
 ## Fora de escopo
 

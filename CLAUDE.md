@@ -42,10 +42,20 @@ nimbus/
   cli.py               argparse + REPL
 tests/                 TDD-driven, 1 arquivo por área
 pedidos/               Relatórios markdown gerados em runtime (gitignored)
+logs/                  Arquivo por sessão CLI: session_<timestamp>.log (gitignored)
 docs/superpowers/
   specs/               Design document
   plans/               Plano de implementação task-a-task
 ```
+
+### Logging
+
+Configurado em `nimbus/cli.py:_setup_logging`. Dois handlers:
+
+- **Console (`stderr`)**: `WARNING` por padrão, sobe pra `INFO` com `--debug` ou `NIMBUS_DEBUG=1`.
+- **Arquivo `logs/session_<timestamp>.log`**: SEMPRE `INFO` — registra todos os eventos do turno (USER, TOOL CALL, TOOL OK/ERROR, FINAL) com timestamp completo. Um arquivo novo por execução do CLI.
+
+Pra inspecionar o que aconteceu em uma sessão depois: `cat logs/session_*.log` ou `tail -f logs/session_*.log` durante a execução.
 
 ## Convenções
 

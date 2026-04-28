@@ -171,7 +171,7 @@ class Agent:
                     try:
                         result = execute_tool(tc.name, tc.arguments, self.ctx)
                         result_content = json.dumps(result, ensure_ascii=False, default=str)
-                        log.info("TOOL OK: %s", result_content[:200])
+                        log.info("TOOL OK: %s", result_content)
                     except ToolError as e:
                         status = "error"
                         result_content = json.dumps({"error": str(e)}, ensure_ascii=False)
