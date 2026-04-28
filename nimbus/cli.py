@@ -28,10 +28,19 @@ SYSTEM_PROMPT_PATH = PROJECT_ROOT / "nimbus" / "prompts" / "system.md"
 def _setup_logging(verbose: bool, logs_dir: Path = LOGS_DIR) -> Path:
     """Configura console + arquivo. Retorna o caminho do arquivo de log da sessão.
 
-    - Console: nível INFO se `verbose`, senão WARNING (mantém terminal limpo).
-    - Arquivo `logs/session_<timestamp>.log`: SEMPRE em INFO, registra todos os
-      eventos de cada turno (USER, TOOL CALL, TOOL OK/ERROR, FINAL, etc.) com
-      timestamp completo. Um arquivo novo é criado por sessão CLI.
+    - Console (stderr): SEMPRE em ``WARNING`` — mantém o terminal limpo.
+      Em modo ``--debug`` o trace visual (stdout) já mostra todos os eventos do
+      turno; duplicar via logger no stderr só polui.
+    - Arquivo ``logs/session_<timestamp>.log``: SEMPRE em ``INFO`` — registra
+      todos os eventos de cada turno (USER, TOOL CALL, TOOL OK/ERROR, FINAL)
+      com timestamp completo. Para debugging post-mortem, ler o arquivo.
+    - Loggers de bibliotecas ruidosas (``httpx``, ``httpcore``,
+      ``sentence_transformers``) ficam em ``WARNING`` pra não vazar entradas
+      de HTTP/transformers no console nem no arquivo.
+
+    O parâmetro ``verbose`` (vindo de ``--debug`` / ``NIMBUS_DEBUG``) é mantido
+    na assinatura por compatibilidade, mas hoje só liga o trace visual via
+    ``AgentConfig.debug``; o logger não é mais afetado por ele.
     """
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_file = logs_dir / f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -46,7 +55,7 @@ def _setup_logging(verbose: bool, logs_dir: Path = LOGS_DIR) -> Path:
     )
 
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(logging.INFO if verbose else logging.WARNING)
+    console_handler.setLevel(logging.WARNING)
     console_handler.setFormatter(formatter_console)
 
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
@@ -59,6 +68,11 @@ def _setup_logging(verbose: bool, logs_dir: Path = LOGS_DIR) -> Path:
     root.addHandler(console_handler)
     root.addHandler(file_handler)
 
+    # silencia libs ruidosas (HTTP, transformers) tanto no console quanto no arquivo
+    for noisy in ("httpx", "httpcore", "sentence_transformers", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    _ = verbose  # mantido na assinatura por compatibilidade — ver docstring
     return log_file
 
 

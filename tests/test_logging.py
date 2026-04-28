@@ -80,7 +80,9 @@ def test_log_console_silencioso_quando_verbose_false(tmp_path, data_dir, capfd):
     assert "FINAL:" not in err
 
 
-def test_log_console_verbose_mostra_info(tmp_path, data_dir, capfd):
+def test_log_console_verbose_nao_polui_stderr(tmp_path, data_dir, capfd):
+    """Mesmo com verbose=True, o console (stderr) fica em WARNING — o trace
+    visual (stdout, controlado por AgentConfig.debug) é a fonte de info."""
     _setup_logging(verbose=True, logs_dir=tmp_path)
 
     llm = _ScriptedLLM([ChatResponse(content="oi", tool_calls=[])])
@@ -92,5 +94,12 @@ def test_log_console_verbose_mostra_info(tmp_path, data_dir, capfd):
     )
     agent.run_turn("oi")
     err = capfd.readouterr().err
-    assert "USER: oi" in err
-    assert "FINAL: oi" in err
+    assert "USER: oi" not in err
+    assert "FINAL: oi" not in err
+
+
+def test_libs_ruidosas_silenciadas(tmp_path):
+    """httpx e demais libs barulhentas devem ficar em WARNING ou acima."""
+    _setup_logging(verbose=False, logs_dir=tmp_path)
+    for name in ("httpx", "httpcore", "sentence_transformers", "urllib3"):
+        assert logging.getLogger(name).level >= logging.WARNING
