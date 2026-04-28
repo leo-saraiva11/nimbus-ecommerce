@@ -12,7 +12,7 @@ class _ScriptedLLM:
     def __init__(self, responses):
         self._responses = list(responses)
 
-    def chat(self, messages, tools, timeout):
+    def chat(self, messages, tools, timeout, on_text_delta=None):
         return self._responses.pop(0)
 
 

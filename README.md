@@ -32,9 +32,10 @@ cp .env.example .env
 ## Como rodar
 
 ```bash
-python -m nimbus                          # Groq, modo normal
-python -m nimbus --debug                  # Groq, com trace completo
+python -m nimbus                          # Groq, modo normal (com streaming)
+python -m nimbus --debug                  # com trace completo
 python -m nimbus -d                       # equivalente curto
+python -m nimbus --no-stream              # desliga streaming
 python -m nimbus --provider openrouter    # OpenRouter
 python -m nimbus --provider openrouter -d # OpenRouter + debug
 ```
@@ -151,9 +152,10 @@ O **loop do agente** está em `nimbus/agent.py:run_turn`. Escrito à mão, sem L
 ## Bônus implementados
 
 - ✅ Abstração `LLMClient` (Groq + OpenRouter prontos, novos providers em ~30 linhas)
-- ✅ Memória multi-turno (necessária pro fluxo de carrinho)
+- ✅ Memória multi-turno + janela deslizante de 7 turnos no contexto enviado ao LLM
 - ✅ Citação de fonte no RAG (instruída no system prompt + retornada no payload da tool)
 - ✅ Tracking de tokens (`Usage` por response + acumulado por turno e sessão, exibido em modo debug)
+- ✅ **Streaming de resposta** — text deltas em tempo real (callback `on_text_delta` na CLI). Ligado por padrão; desligar com `--no-stream`.
 
 ## Persistência (o que é local)
 
@@ -176,7 +178,6 @@ Zero DB, zero cloud storage. Único tráfego de rede é a chamada HTTP pro LLM.
 
 ## Fora de escopo
 
-- Streaming de resposta
 - Persistência de histórico/carrinho em DB
 - RAG avançado (reranking, HyDE)
 - UI gráfica/web

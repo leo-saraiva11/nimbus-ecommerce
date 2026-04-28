@@ -23,6 +23,7 @@ class AgentConfig:
     llm_timeout_s: float = 30.0
     debug: bool = False
     history_turns: int = 7  # 0 ou negativo = sem janela; mantém todo o histórico
+    stream: bool = True  # streaming da resposta do LLM (text deltas em tempo real)
 
 
 class Agent:
@@ -116,16 +117,22 @@ class Agent:
 
     # ------------------------------------------------------------------ loop --
 
-    def run_turn(self, user_message: str) -> str:
+    def run_turn(self, user_message: str, on_text_delta=None) -> str:
+        """Executa um turno completo do agente.
+
+        ``on_text_delta``: callback opcional invocado para cada incremento de
+        texto recebido em streaming (do LLM). Quando passado, o cliente LLM
+        usa o modo streaming e o conteúdo aparece progressivamente no
+        ``on_text_delta`` enquanto a resposta é gerada. Ignorado se
+        ``AgentConfig.stream`` for False.
+        """
         self._turn_counter += 1
         self._trace(_HR, f"  TURNO #{self._turn_counter}", _HR, f"  USER: {user_message}", "")
 
         log.info("USER: %s", user_message)
         self.conversation.append({"role": "user", "content": user_message})
 
-        # system prompt sem mais injeção automática de RAG: o modelo decide
-        # chamar a tool search_policies quando a pergunta for institucional.
-        messages_template = self._build_messages()
+        effective_delta = on_text_delta if self.config.stream else None
         self.last_turn_usage = Usage()
 
         for iteration in range(self.config.max_iterations):
@@ -141,6 +148,7 @@ class Agent:
                     messages=messages,
                     tools=TOOL_SCHEMAS,
                     timeout=self.config.llm_timeout_s,
+                    on_text_delta=effective_delta,
                 )
             except (TimeoutError, LLMError) as e:
                 log.error("erro no LLM: %s", e)

@@ -6,7 +6,7 @@ from nimbus.llm.base import ChatResponse, ToolCall
 class AlwaysToolCallLLM:
     """Mock LLM que sempre devolve uma tool call (vai forçar max_iter)."""
 
-    def chat(self, messages, tools, timeout):
+    def chat(self, messages, tools, timeout, on_text_delta=None):
         return ChatResponse(
             content=None,
             tool_calls=[ToolCall(id="t1", name="view_cart", arguments="{}")],

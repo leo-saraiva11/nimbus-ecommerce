@@ -111,6 +111,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Provider de LLM (padrão: groq, ou NIMBUS_PROVIDER do .env).",
     )
+    parser.add_argument(
+        "--no-stream",
+        action="store_true",
+        help="Desliga streaming da resposta (modo blocking, espera resposta completa).",
+    )
     return parser.parse_args(argv)
 
 
@@ -140,19 +145,25 @@ def main() -> None:
         print(f"ERRO: {e}", file=sys.stderr)
         sys.exit(1)
 
+    stream = not args.no_stream
     rag = _build_rag(debug=debug)
     agent = Agent(
         llm=llm,
         rag=rag,
-        config=AgentConfig(debug=debug),
+        config=AgentConfig(debug=debug, stream=stream),
         data_dir=DATA_DIR,
         pedidos_dir=PEDIDOS_DIR,
         system_prompt_template=SYSTEM_PROMPT_PATH.read_text(encoding="utf-8"),
     )
 
     banner = f"Loja Nimbus — assistente virtual (provider: {provider}). Digite 'sair' para encerrar."
+    flags = []
     if debug:
-        banner += "  [modo DEBUG ligado: trace completo após cada pergunta]"
+        flags.append("DEBUG")
+    if not stream:
+        flags.append("no-stream")
+    if flags:
+        banner += f"  [{' + '.join(flags)}]"
     print(banner + "\n")
 
     while True:
@@ -166,8 +177,15 @@ def main() -> None:
         if user.lower() in {"sair", "exit", "quit"}:
             print("Até logo!")
             break
-        resposta = agent.run_turn(user)
-        print(f"\nNimbus> {resposta}\n")
+
+        if stream:
+            print("Nimbus> ", end="", flush=True)
+            on_delta = lambda s: print(s, end="", flush=True)
+            agent.run_turn(user, on_text_delta=on_delta)
+            print("\n")  # fecha a linha streamada
+        else:
+            resposta = agent.run_turn(user)
+            print(f"\nNimbus> {resposta}\n")
 
 
 if __name__ == "__main__":

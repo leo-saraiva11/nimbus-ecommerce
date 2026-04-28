@@ -13,7 +13,7 @@ class _RecordingLLM:
     def __init__(self):
         self.received = []
 
-    def chat(self, messages, tools, timeout):
+    def chat(self, messages, tools, timeout, on_text_delta=None):
         self.received.append(list(messages))
         return ChatResponse(content="ok", tool_calls=[])
 
@@ -76,7 +76,7 @@ def test_history_window_corta_em_borda_de_user_message(data_dir, tmp_path):
             self._responses = list(responses)
             self.received = []
 
-        def chat(self, messages, tools, timeout):
+        def chat(self, messages, tools, timeout, on_text_delta=None):
             self.received.append(list(messages))
             return self._responses.pop(0)
 

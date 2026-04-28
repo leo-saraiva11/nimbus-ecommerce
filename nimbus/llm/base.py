@@ -1,7 +1,7 @@
 """Interface comum para clientes LLM. Trocar provider = trocar arquivo."""
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 
 @dataclass
@@ -33,6 +33,12 @@ class ChatResponse:
     raw: Any = None  # response original do provider, p/ debug
 
 
+# Callback chamado para cada incremento de texto durante streaming.
+# Quando passado em ``LLMClient.chat``, o cliente usa o modo streaming do
+# provider e invoca este callback a cada delta de conteúdo recebido.
+TextDeltaCallback = Callable[[str], None]
+
+
 class LLMError(Exception):
     """Erro genérico de LLM (timeout, rate limit, etc.)."""
 
@@ -43,4 +49,5 @@ class LLMClient(Protocol):
         messages: list[dict],
         tools: list[dict],
         timeout: float,
+        on_text_delta: Optional[TextDeltaCallback] = None,
     ) -> ChatResponse: ...

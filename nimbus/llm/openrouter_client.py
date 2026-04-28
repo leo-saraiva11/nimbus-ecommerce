@@ -1,8 +1,10 @@
 """Cliente OpenRouter — usa o SDK da OpenAI apontando para a base_url da OpenRouter."""
 from __future__ import annotations
 import os
+from typing import Optional
 
-from nimbus.llm.base import ChatResponse, LLMError, ToolCall, Usage
+from nimbus.llm.base import ChatResponse, LLMError, TextDeltaCallback, ToolCall, Usage
+from nimbus.llm._stream_accumulator import accumulate_stream
 
 
 class OpenRouterClient:
@@ -17,7 +19,18 @@ class OpenRouterClient:
             base_url="https://openrouter.ai/api/v1",
         )
 
-    def chat(self, messages: list[dict], tools: list[dict], timeout: float) -> ChatResponse:
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        timeout: float,
+        on_text_delta: Optional[TextDeltaCallback] = None,
+    ) -> ChatResponse:
+        if on_text_delta is not None:
+            return self._chat_stream(messages, tools, timeout, on_text_delta)
+        return self._chat_blocking(messages, tools, timeout)
+
+    def _chat_blocking(self, messages, tools, timeout) -> ChatResponse:
         try:
             resp = self._client.chat.completions.create(
                 model=self.model,
@@ -44,9 +57,19 @@ class OpenRouterClient:
                 completion_tokens=getattr(resp.usage, "completion_tokens", 0) or 0,
                 total_tokens=getattr(resp.usage, "total_tokens", 0) or 0,
             )
-        return ChatResponse(
-            content=choice.content,
-            tool_calls=tool_calls,
-            usage=usage,
-            raw=resp,
-        )
+        return ChatResponse(content=choice.content, tool_calls=tool_calls, usage=usage, raw=resp)
+
+    def _chat_stream(self, messages, tools, timeout, on_text_delta) -> ChatResponse:
+        try:
+            stream = self._client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                timeout=timeout,
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+        except Exception as e:
+            raise LLMError(f"Erro na chamada OpenRouter (stream): {e}") from e
+        return accumulate_stream(stream, on_text_delta)

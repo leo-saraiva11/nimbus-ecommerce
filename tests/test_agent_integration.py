@@ -11,7 +11,7 @@ class ScriptedLLM:
         self._responses = list(responses)
         self.received_messages = []
 
-    def chat(self, messages, tools, timeout):
+    def chat(self, messages, tools, timeout, on_text_delta=None):
         self.received_messages.append(messages)
         return self._responses.pop(0)
 
