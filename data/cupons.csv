@@ -1,0 +1,6 @@
+codigo,tipo,valor,pedido_minimo,validade
+BEMVINDO10,percentual,10,0,2026-12-31
+TECH50,fixo,50,300,2026-12-31
+MEGA15,percentual,15,1000,2026-12-31
+FRETEGRATIS,frete_gratis,0,200,2026-06-30
+EXPIRADO,percentual,20,0,2024-01-01
