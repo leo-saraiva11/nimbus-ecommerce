@@ -1,12 +1,19 @@
 # Nimbus — Agente Conversacional de E-commerce
 
-Mini-agente CLI que conversa com o usuário pra ajudá-lo a montar um carrinho na loja fictícia **Loja Nimbus** (e-commerce de eletrônicos), consulta CSVs via tools, busca políticas em texto via RAG, e gera um relatório markdown final do pedido.
+Mini-agente CLI que conversa com o usuário pra ajudá-lo a montar um carrinho na loja fictícia **Loja Nimbus** (e-commerce de eletrônicos), consulta CSVs via tools, busca políticas em texto via RAG-como-tool, e gera um relatório markdown final do pedido.
 
 Desafio prático Fase 3 — Vaga Dev de Agentes e Automação.
 
 ## Provider de LLM
 
-Padrão: **Groq** (`llama-3.3-70b-versatile`). O free tier é suficiente. A interface `LLMClient` (em `nimbus/llm/base.py`) é desacoplada — pra trocar pra OpenRouter, Anthropic ou Ollama, basta criar um novo `*_client.py` implementando o Protocol e ajustar uma linha no `cli.py`.
+Suporta dois providers prontos:
+
+| Provider | Modelo padrão | Como ligar |
+|---|---|---|
+| **Groq** (padrão) | `llama-3.3-70b-versatile` | `GROQ_API_KEY` no `.env` |
+| **OpenRouter** | `meta-llama/llama-3.3-70b-instruct` | `OPENROUTER_API_KEY` + `NIMBUS_PROVIDER=openrouter` |
+
+A interface `LLMClient` (em `nimbus/llm/base.py`) é desacoplada — adicionar Anthropic/Ollama é criar mais um arquivo `*_client.py` implementando o Protocol e dispatchar no `cli._build_llm`.
 
 ## Setup
 
@@ -14,20 +21,22 @@ Requer Python 3.11+.
 
 ```bash
 git clone <este-repo>
-cd nimbus_ecommerce
-python3.11 -m venv .venv
+cd recria-ai
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
-# edite .env e cole sua GROQ_API_KEY (https://console.groq.com)
+# edite .env e cole sua GROQ_API_KEY (ou OPENROUTER_API_KEY)
 ```
 
 ## Como rodar
 
 ```bash
-python -m nimbus              # modo normal
-python -m nimbus --debug      # trace completo de cada turno
-python -m nimbus -d           # equivalente curto
+python -m nimbus                          # Groq, modo normal
+python -m nimbus --debug                  # Groq, com trace completo
+python -m nimbus -d                       # equivalente curto
+python -m nimbus --provider openrouter    # OpenRouter
+python -m nimbus --provider openrouter -d # OpenRouter + debug
 ```
 
 Primeiro start baixa o modelo de embeddings `all-MiniLM-L6-v2` (~80MB).
@@ -36,41 +45,40 @@ Primeiro start baixa o modelo de embeddings `all-MiniLM-L6-v2` (~80MB).
 
 Imprime, a cada pergunta, um trace estruturado de tudo que o agente faz por baixo dos panos:
 
-- **RAG retrieval**: os chunks recuperados, com score e nome do arquivo de origem.
-- **Iterações do loop**: para cada iteração, a request ao LLM (nº de mensagens, tools, timeout) e a response (`content` + `tool_calls` com argumentos completos).
-- **Tools**: nome, args, **resultado completo sem truncamento**, duração e status (`ok`/`error`/`crash`).
+- **Iterações do loop**: para cada iteração, a request ao LLM (nº de mensagens, tools, timeout) e a response (`content` + `tool_calls` com argumentos completos), com **tokens consumidos** quando o provider expõe (`prompt`, `completion`, `total`).
+- **Tools**: nome, args, **resultado completo sem truncamento**, duração e status (`ok`/`error`/`crash`). Inclui `search_policies` (RAG) com score e fonte de cada chunk retornado.
+- **Resumo do turno**: tokens consumidos no turno + acumulado total da sessão.
 - **Resposta final** ao usuário.
 
-Exemplo de saída em modo debug:
+Exemplo de saída em modo debug (pergunta institucional):
 
 ```
 ══════════════════════════════════════════════════════════════════════
   TURNO #1
 ══════════════════════════════════════════════════════════════════════
-  USER: tem produtos da logitech?
-
-  ── RAG retrieval (top 3) ──────────────────────────────────────
-  [1] score=0.812  fonte=politica_trocas_devolucoes.md
-      Direito de arrependimento em 7 dias corridos para devoluções.
-  ...
+  USER: posso devolver um produto?
 
   ── Iteração 1 ─────────────────────────────────────────────────
-  → LLM request  (mensagens=2, tools=8, timeout=30.0s)
-  ← LLM response  (842ms)
+  → LLM request  (mensagens=2, tools=9, timeout=30.0s)
+  ← LLM response  (842ms, tokens prompt=150 completion=18 total=168)
      content: (vazio)
      tool_calls (1):
-       [t1] search_products({"query": "logitech"})
-  ⚙ TOOL search_products  (3ms, ok)
-     args:   {"query": "logitech"}
-     result: [{"id": "P001", "nome": "Mouse Gamer Logitech G203", ...}, ...]
+       [t1] search_policies({"query": "devolver produto", "top_k": 3})
+  ⚙ TOOL search_policies  (3ms, ok)
+     args:   {"query": "devolver produto", "top_k": 3}
+     result: [{"fonte": "politica_trocas_devolucoes.md", "score": 0.892,
+               "trecho": "Direito de arrependimento em 7 dias..."}]
 
   ── Iteração 2 ─────────────────────────────────────────────────
-  → LLM request  (mensagens=4, tools=8, timeout=30.0s)
-  ← LLM response  (1124ms)
-     content: Encontrei 2 produtos Logitech: o Mouse G203 (R$ 159,90)...
+  → LLM request  (mensagens=4, tools=9, timeout=30.0s)
+  ← LLM response  (1124ms, tokens prompt=420 completion=45 total=465)
+     content: Sim, você pode devolver em até 7 dias corridos
+              (fonte: politica_trocas_devolucoes.md).
      tool_calls: (nenhuma)
 
-  ✓ FINAL: Encontrei 2 produtos Logitech: o Mouse G203 (R$ 159,90)...
+  ✓ FINAL: Sim, você pode devolver em até 7 dias...
+  Σ tokens neste turno: prompt=570 completion=63 total=633
+  Σ tokens acumulados:  prompt=570 completion=63 total=633
 ══════════════════════════════════════════════════════════════════════
 ```
 
@@ -82,50 +90,57 @@ A flag também ativa logging em nível `INFO` no `logging` padrão (mesmo efeito
 pytest -v
 ```
 
+46 testes cobrindo: parsing de tool calls, parada do loop em `max_iterations`, integração com mock de LLMClient, todas as tools (catalog, pricing, cart, report, search_policies), RAG (chunker, store), modo debug e tracking de tokens.
+
 ## Arquitetura do loop
 
-O **loop do agente** está em `nimbus/agent.py:run_turn`. Ele é escrito à mão (sem LangChain/CrewAI/Agno):
+O **loop do agente** está em `nimbus/agent.py:run_turn`. Escrito à mão, sem LangChain/CrewAI/Agno:
 
-1. Adiciona a mensagem do usuário ao histórico.
-2. Recupera top-3 chunks RAG do corpus para a pergunta.
-3. Em cada iteração (até `MAX_ITERATIONS=5`):
-   - Chama o LLM com o histórico + tool schemas.
-   - Se resposta tem `tool_calls`: executa cada tool localmente, anexa resultado como mensagem `role=tool`, segue pra próxima iteração.
-   - Se resposta é texto final: retorna.
-4. Se estourar o limite, retorna fallback amigável.
+1. Adiciona a mensagem do usuário ao histórico de conversa.
+2. Em cada iteração (até `MAX_ITERATIONS=5`):
+   - Monta as mensagens (system prompt + histórico) e chama o LLM com `TOOL_SCHEMAS`.
+   - Se a resposta tem `tool_calls`: executa cada tool localmente via `execute_tool(name, args, ctx)`, anexa o resultado ao histórico como `role=tool`, e segue pra próxima iteração.
+   - Se a resposta é texto final: retorna pro usuário.
+3. Se estourar `MAX_ITERATIONS`, retorna fallback amigável.
+
+**RAG não é injetado automaticamente.** O modelo decide consultar a base institucional via tool `search_policies` quando a pergunta é sobre regras/políticas. Isso evita ruído em perguntas de catálogo (`"tem mouse logitech?"` não puxa chunks de devolução).
 
 ### Guardas obrigatórias
 
 - `MAX_ITERATIONS = 5`
 - `LLM_TIMEOUT_S = 30`
 - `try/except ToolError` → erro estruturado (`{"error": "..."}`) devolvido ao modelo, que decide o próximo passo.
-- Logging estruturado de cada iteração: pergunta do usuário, tool_calls com argumentos, resultados das tools, resposta final. Para inspecionar tudo em runtime, rode com `--debug` (ou `-d`) — ver seção acima.
+- `try/except Exception` (inesperado) → log + payload genérico de erro. Distingue erro esperado (vai pro modelo) de crash (loga e segue).
+- Logging estruturado por iteração: pergunta do usuário, tool_calls com argumentos, resultados das tools, resposta final.
 
-## Tools disponíveis (8)
+## Tools disponíveis (9)
 
-| Tool | Função |
-|---|---|
-| `search_products(query, categoria?, max_preco?)` | Busca no catálogo |
-| `get_product(id)` | Detalhes de 1 produto |
-| `validate_coupon(codigo, valor_pedido)` | Valida cupom |
-| `calculate_shipping(uf, valor_pedido)` | Calcula frete (50% off acima R$500) |
-| `add_to_cart(produto_id, quantidade)` | Adiciona ao carrinho |
-| `view_cart()` | Mostra carrinho |
-| `remove_from_cart(produto_id)` | Remove do carrinho |
-| `generate_order_report(uf, cupom?)` | Gera markdown final em `pedidos/` |
+| Tool | Função | Fonte |
+|---|---|---|
+| `search_products(query, categoria?, max_preco?)` | Busca no catálogo | `data/produtos.csv` |
+| `get_product(id)` | Detalhes de 1 produto | `data/produtos.csv` |
+| `validate_coupon(codigo, valor_pedido)` | Valida cupom | `data/cupons.csv` |
+| `calculate_shipping(uf, valor_pedido)` | Calcula frete (50% off acima R$500) | `data/frete.csv` |
+| `add_to_cart(produto_id, quantidade)` | Adiciona ao carrinho | estado em memória |
+| `view_cart()` | Mostra carrinho | estado em memória |
+| `remove_from_cart(produto_id)` | Remove do carrinho | estado em memória |
+| `generate_order_report(uf, cupom?)` | Gera markdown final em `pedidos/` | tudo |
+| `search_policies(query, top_k?)` | RAG sobre políticas (trocas, pagamento, entrega, garantia) | `corpus/*.md` |
 
-## Decisões de chunking (RAG)
+## Decisões de RAG
 
-- **Chunking por parágrafo** com overlap de 1 parágrafo. Os docs do corpus são curtos (~10-20 parágrafos cada), então chunking sofisticado seria overkill — parágrafos casam bem com a granularidade das perguntas.
-- **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2`, multilíngue suficiente, roda local (zero custo, zero rede após o primeiro download).
-- **Store**: in-memory com cosine similarity em `numpy`. Para 4 docs × ~15 chunks = ~60 vetores, qualquer DB seria over-engineering.
-- **Retrieval**: top_k=3, sem reranking.
+- **RAG-como-tool** (`search_policies`) em vez de injeção automática no system prompt — o modelo decide quando consultar políticas, evitando ruído.
+- **Chunking por parágrafo** com overlap de 1 parágrafo. Os docs do corpus são curtos (~10-20 parágrafos cada), então chunking sofisticado seria overkill.
+- **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2`, roda local (zero custo, zero rede após primeiro download).
+- **Store**: in-memory com cosine similarity em `numpy`. ~60 vetores → qualquer DB seria over-engineering.
+- **Retrieval**: top_k configurável pelo modelo (padrão 3, máx 5), sem reranking.
 
 ## Bônus implementados
 
-- ✅ Abstração `LLMClient` (trocar provider = trocar arquivo)
+- ✅ Abstração `LLMClient` (Groq + OpenRouter prontos, novos providers em ~30 linhas)
 - ✅ Memória multi-turno (necessária pro fluxo de carrinho)
-- ✅ Citação de fonte no RAG (instruída no system prompt)
+- ✅ Citação de fonte no RAG (instruída no system prompt + retornada no payload da tool)
+- ✅ Tracking de tokens (`Usage` por response + acumulado por turno e sessão, exibido em modo debug)
 
 ## Fora de escopo
 
@@ -137,14 +152,16 @@ O **loop do agente** está em `nimbus/agent.py:run_turn`. Ele é escrito à mão
 ## Estrutura
 
 ```
-data/        CSVs (catálogo, cupons, frete)
-corpus/      Docs institucionais (.md) consultados via RAG
+data/                  CSVs (catálogo, cupons, frete)
+corpus/                Docs institucionais consultados via search_policies
 nimbus/
-  llm/       Interface LLMClient + GroqClient
-  rag/       Chunker, embeddings, store
-  tools/     Implementações das 8 tools + registry
-  agent.py   LOOP PRÓPRIO
-  cli.py     REPL
-tests/       4 grupos de testes (parsing, max_iter, integração, tools)
-pedidos/     Relatórios gerados (gitignored)
+  llm/                 Interface LLMClient + GroqClient + OpenRouterClient
+  rag/                 Chunker, embeddings, vector store
+  tools/               Implementações das 9 tools + registry/dispatcher
+  prompts/system.md    Instruções pro LLM (quando usar cada tool)
+  agent.py             LOOP PRÓPRIO (peça avaliada)
+  cli.py               REPL com argparse + seleção de provider
+tests/                 46 testes (TDD por task)
+pedidos/               Relatórios gerados (gitignored)
+docs/superpowers/      Spec + plano de implementação
 ```
