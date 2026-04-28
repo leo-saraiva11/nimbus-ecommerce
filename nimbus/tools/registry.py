@@ -1,7 +1,7 @@
 """Schemas JSON das tools + dispatcher para o loop do agente."""
 from __future__ import annotations
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,7 @@ TOOL_SCHEMAS: list[dict] = [
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Termo de busca (nome, marca ou palavra-chave)"},
-                    "categoria": {"type": "string", "description": "Filtra por categoria exata (Periféricos, Notebooks, Smartphones, Áudio, Acessórios)"},
+                    "categoria": {"type": "string", "description": "Filtra por categoria exata (Perifericos, Notebooks, Smartphones, Audio, Acessorios) — sem acentos"},
                     "max_preco": {"type": "number", "description": "Preço máximo em reais"},
                 },
                 "required": ["query"],

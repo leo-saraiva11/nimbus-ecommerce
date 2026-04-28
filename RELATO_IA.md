@@ -41,7 +41,7 @@ A IA sugeriu inicialmente **8 tools como peças separadas em arquivos diferentes
 
 ## Trecho 100% meu (sem IA)
 
-`nimbus/tools/cart.py:30-46` — a função `add_to_cart` com a lógica de "se já existe, soma à quantidade e revalida estoque". Escrevi à mão porque a IA tinha proposto ou (a) sobrescrever a quantidade, ou (b) lançar erro se já existe — ambos comportamentos errados pra UX de carrinho.
+`nimbus/tools/cart.py:20-35` — a função `add_to_cart` com a lógica de "se já existe, soma à quantidade e revalida estoque contra o total acumulado". Escrevi à mão porque a IA tinha proposto ou (a) sobrescrever a quantidade, ou (b) lançar erro se já existe — ambos comportamentos errados pra UX de carrinho.
 
 ## Reflexão
 

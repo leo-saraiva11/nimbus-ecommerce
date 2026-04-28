@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from nimbus.llm.base import ChatResponse, LLMError
 from nimbus.tools.errors import ToolError
