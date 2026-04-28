@@ -124,6 +124,7 @@ O **loop do agente** está em `nimbus/agent.py:run_turn`. Escrito à mão, sem L
 - `try/except ToolError` → erro estruturado (`{"error": "..."}`) devolvido ao modelo, que decide o próximo passo.
 - `try/except Exception` (inesperado) → log + payload genérico de erro. Distingue erro esperado (vai pro modelo) de crash (loga e segue).
 - Logging estruturado por iteração: pergunta do usuário, tool_calls com argumentos, resultados das tools, resposta final.
+- **Janela de histórico** (`AgentConfig.history_turns=7`): apenas os últimos 7 turnos vão pro LLM em cada chamada (cortando sempre em borda de `role=user`, sem quebrar o protocolo de tool use). O histórico completo segue em `Agent.conversation` para logs e debug. Configurável: 0 ou negativo desliga a janela.
 
 ## Tools disponíveis (9)
 

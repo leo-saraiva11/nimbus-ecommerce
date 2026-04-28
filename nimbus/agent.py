@@ -22,6 +22,7 @@ class AgentConfig:
     max_iterations: int = 5
     llm_timeout_s: float = 30.0
     debug: bool = False
+    history_turns: int = 7  # 0 ou negativo = sem janela; mantém todo o histórico
 
 
 class Agent:
@@ -58,9 +59,15 @@ class Agent:
     def _trace_llm_request(self, messages: list[dict]) -> None:
         if not self.config.debug:
             return
+        # window_info útil pra debug quando a janela está limitando
+        full = len(self.conversation)
+        sent = len(messages) - 1  # menos o system
+        window_info = ""
+        if self.config.history_turns and full > sent:
+            window_info = f", janela={self.config.history_turns} turnos (cortou {full - sent} msgs antigas)"
         self._trace(
             f"  → LLM request  (mensagens={len(messages)}, "
-            f"tools={len(TOOL_SCHEMAS)}, timeout={self.config.llm_timeout_s}s)"
+            f"tools={len(TOOL_SCHEMAS)}, timeout={self.config.llm_timeout_s}s{window_info})"
         )
 
     def _trace_llm_response(self, response: ChatResponse, elapsed_ms: float) -> None:
@@ -206,6 +213,25 @@ class Agent:
 
     # --------------------------------------------------------------- helpers --
 
+    def _windowed_conversation(self) -> list[dict]:
+        """Retorna a fatia da conversa que vai pro LLM (últimos N turnos).
+
+        Janela é configurada em ``AgentConfig.history_turns``. O histórico
+        completo segue em ``self.conversation`` para logs/debug.
+
+        Corta sempre em borda de ``role=user`` (início de turno) — nunca no
+        meio de uma sequência ``assistant(tool_calls)`` → ``tool``, que
+        quebraria o protocolo de tool use do OpenAI/Groq.
+        """
+        n = self.config.history_turns
+        if n is None or n <= 0:
+            return self.conversation
+        user_idx = [i for i, m in enumerate(self.conversation) if m.get("role") == "user"]
+        if len(user_idx) <= n:
+            return self.conversation
+        cutoff = user_idx[-n]
+        return self.conversation[cutoff:]
+
     def _build_messages(self) -> list[dict]:
         # mantém compatibilidade com prompts que usam {rag_context}
         # (passa string vazia — RAG agora é tool, o modelo busca quando precisa)
@@ -213,4 +239,4 @@ class Agent:
             system_content = self.system_prompt_template.format(rag_context="")
         except (KeyError, IndexError):
             system_content = self.system_prompt_template
-        return [{"role": "system", "content": system_content}, *self.conversation]
+        return [{"role": "system", "content": system_content}, *self._windowed_conversation()]
