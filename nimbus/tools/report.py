@@ -8,6 +8,8 @@ from nimbus.tools.cart import CartState, view_cart
 from nimbus.tools.errors import ToolError
 from nimbus.tools.pricing import calculate_shipping, validate_coupon
 
+PIX_DISCOUNT_RATE = 0.05  # 5% adicional pra pagamento via Pix (regra automática da loja)
+
 
 def _fmt_brl(v: float) -> str:
     return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -21,14 +23,20 @@ def generate_order_report(
     uf: str,
     cupom: Optional[str],
     out_dir: Path,
+    forma_pagamento: Optional[str] = None,
 ) -> dict:
+    """Gera o relatório do pedido. Suporta cupom (validado em ``cupons.csv``) e
+    a regra automática de **5% off para pagamento via Pix** — passe
+    ``forma_pagamento="pix"`` (case insensitive). Pix NÃO é cupom; é regra
+    institucional descrita em ``corpus/formas_pagamento.md``.
+    """
     if not cart.items:
         raise ToolError("Carrinho vazio — adicione itens antes de fechar o pedido")
 
     view = view_cart(cart, produtos)
     subtotal = view["subtotal"]
 
-    desconto = 0.0
+    desconto_cupom = 0.0
     cupom_info = None
     frete_gratis_pelo_cupom = False
     if cupom:
@@ -36,12 +44,16 @@ def generate_order_report(
         if cupom_info["tipo"] == "frete_gratis":
             frete_gratis_pelo_cupom = True
         else:
-            desconto = cupom_info["desconto"]
+            desconto_cupom = cupom_info["desconto"]
+
+    base_pos_cupom = max(0.0, subtotal - desconto_cupom)
+    pix = bool(forma_pagamento) and forma_pagamento.lower() == "pix"
+    desconto_pix = round(base_pos_cupom * PIX_DISCOUNT_RATE, 2) if pix else 0.0
 
     frete_calc = calculate_shipping(frete, uf, subtotal)
     valor_frete = 0.0 if frete_gratis_pelo_cupom else frete_calc["valor"]
 
-    total = round(subtotal - desconto + valor_frete, 2)
+    total = round(subtotal - desconto_cupom - desconto_pix + valor_frete, 2)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -70,16 +82,18 @@ def generate_order_report(
         if frete_gratis_pelo_cupom:
             linhas.append(f"- Cupom {cupom}: frete grátis")
         else:
-            linhas.append(f"- Cupom {cupom}: -{_fmt_brl(desconto)}")
+            linhas.append(f"- Cupom {cupom}: -{_fmt_brl(desconto_cupom)}")
+    if pix:
+        linhas.append(f"- Desconto Pix (5%): -{_fmt_brl(desconto_pix)}")
     linhas.append(
         f"- Frete ({uf}, {frete_calc['prazo_dias']} dias úteis): {_fmt_brl(valor_frete)}"
     )
     linhas += [
         f"- **Total: {_fmt_brl(total)}**",
         "",
-        "## Forma de pagamento sugerida",
+        "## Forma de pagamento",
         "",
-        "Pix (5% de desconto adicional disponível)",
+        f"{'Pix (5% de desconto aplicado)' if pix else 'A definir no checkout (Pix dá 5% off automático)'}",
         "",
     ]
 
@@ -88,7 +102,9 @@ def generate_order_report(
     return {
         "caminho": str(caminho),
         "subtotal": round(subtotal, 2),
-        "desconto": round(desconto, 2),
+        "desconto_cupom": round(desconto_cupom, 2),
+        "desconto_pix": desconto_pix,
         "frete": round(valor_frete, 2),
         "total": total,
+        "forma_pagamento": "pix" if pix else (forma_pagamento or "indefinida"),
     }

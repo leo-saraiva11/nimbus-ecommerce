@@ -27,13 +27,16 @@ def search_products(
 ) -> list[dict]:
     """Filtra produtos por termo (nome/marca/descrição), categoria e teto de preço."""
     q = query.lower().strip()
+    # 0 ou negativo == "sem teto" (o LLM frequentemente passa 0 querendo dizer
+    # "ignora o filtro de preço"; rejeitar isso degrada UX e força re-chamada)
+    aplicar_teto = max_preco is not None and max_preco > 0
     out = []
     for p in produtos:
         if q and q not in p["nome"].lower() and q not in p["marca"].lower() and q not in p["descricao_curta"].lower():
             continue
         if categoria and p["categoria"] != categoria:
             continue
-        if max_preco is not None and p["preco"] > max_preco:
+        if aplicar_teto and p["preco"] > max_preco:
             continue
         out.append(p)
     return out

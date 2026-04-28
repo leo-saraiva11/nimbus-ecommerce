@@ -31,6 +31,17 @@ def test_search_products_by_max_preco(data_dir):
     assert all(p["preco"] <= 100.0 for p in results)
 
 
+def test_search_products_max_preco_zero_eh_sem_filtro(data_dir):
+    """LLM frequentemente passa max_preco=0 querendo dizer 'ignora teto'.
+    Tratamos como 'sem filtro' em vez de filtrar produtos com preço <= 0."""
+    produtos = load_products(data_dir / "produtos.csv")
+    results = search_products(produtos, query="", categoria="Notebooks", max_preco=0)
+    assert len(results) >= 1
+    # confirma que não retornou só produtos baratos — todos os notebooks aparecem
+    precos = [p["preco"] for p in results]
+    assert max(precos) > 1000  # se filtrasse por <=0 estaria vazio
+
+
 def test_get_product_found(data_dir):
     produtos = load_products(data_dir / "produtos.csv")
     p = get_product(produtos, "P001")

@@ -133,12 +133,30 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "generate_order_report",
-            "description": "Gera o relatório markdown final do pedido (com itens, cupom, frete, total) e salva em arquivo. Use quando o usuário sinalizar que quer fechar/finalizar o pedido.",
+            "description": (
+                "Gera o relatório markdown final do pedido (com itens, cupom, "
+                "frete, total) e salva em arquivo. Use quando o usuário "
+                "sinalizar que quer fechar/finalizar o pedido."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "uf": {"type": "string"},
-                    "cupom": {"type": "string", "description": "Código do cupom (opcional)"},
+                    "uf": {"type": "string", "description": "UF para cálculo de frete (ex: SP)"},
+                    "cupom": {
+                        "type": "string",
+                        "description": (
+                            "Código de cupom existente em cupons.csv (ex: BEMVINDO10, TECH50). "
+                            "NÃO use para Pix — Pix é regra automática, ver forma_pagamento."
+                        ),
+                    },
+                    "forma_pagamento": {
+                        "type": "string",
+                        "enum": ["pix", "cartao", "boleto"],
+                        "description": (
+                            "Forma de pagamento. 'pix' aplica 5% de desconto adicional "
+                            "automaticamente (regra da loja, NÃO é cupom)."
+                        ),
+                    },
                 },
                 "required": ["uf"],
             },
@@ -207,8 +225,9 @@ def execute_tool(name: str, arguments: Any, ctx: ToolContext) -> Any:
             cupons=ctx.cupons,
             frete=ctx.frete,
             uf=args["uf"],
-            cupom=args.get("cupom"),
+            cupom=args.get("cupom") or None,  # string vazia → None
             out_dir=ctx.pedidos_dir,
+            forma_pagamento=args.get("forma_pagamento") or None,
         )
     if name == "search_policies":
         if ctx.rag is None:

@@ -143,9 +143,9 @@ O **loop do agente** está em `nimbus/agent.py:run_turn`. Escrito à mão, sem L
 ## Decisões de RAG
 
 - **RAG-como-tool** (`search_policies`) em vez de injeção automática no system prompt — o modelo decide quando consultar políticas, evitando ruído.
-- **Chunking por parágrafo** com overlap de 1 parágrafo. Os docs do corpus são curtos (~10-20 parágrafos cada), então chunking sofisticado seria overkill.
+- **Whole-document chunking** (`nimbus/rag/chunker.py:whole_document`): cada `.md` é 1 chunk único. Os docs são pequenos (≈300-800 tokens cada), então fragmentar por parágrafo retornava lixo (top-k devolvia o título do documento ou um único parágrafo descontextualizado, e o modelo precisava re-chamar com top_k maior). Doc inteiro → 1 retrieval = contexto completo. A função `chunk_markdown` (parágrafo + overlap) continua disponível para quando o corpus crescer.
 - **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2`, roda local (zero custo, zero rede após primeiro download).
-- **Store**: in-memory com cosine similarity em `numpy`. ~60 vetores → qualquer DB seria over-engineering.
+- **Store**: in-memory com cosine similarity em `numpy`. 4 vetores → qualquer DB seria over-engineering.
 - **Retrieval**: top_k configurável pelo modelo (padrão 3, máx 5), sem reranking.
 
 ## Bônus implementados

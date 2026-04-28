@@ -13,7 +13,7 @@ from nimbus.agent import Agent, AgentConfig
 from nimbus.llm.base import LLMError
 from nimbus.llm.groq_client import GroqClient
 from nimbus.llm.openrouter_client import OpenRouterClient
-from nimbus.rag.chunker import chunk_markdown
+from nimbus.rag.chunker import whole_document
 from nimbus.rag.embeddings import SentenceTransformerEmbedder
 from nimbus.rag.store import VectorStore
 
@@ -79,14 +79,14 @@ def _setup_logging(verbose: bool, logs_dir: Path = LOGS_DIR) -> Path:
 def _build_rag(debug: bool) -> VectorStore:
     print("[setup] carregando embeddings (primeira vez baixa o modelo, ~80MB)...", file=sys.stderr)
     store = VectorStore(embedder=SentenceTransformerEmbedder())
-    n = 0
+    chunks = []
     for md in sorted(CORPUS_DIR.glob("*.md")):
-        chunks = chunk_markdown(md.read_text(encoding="utf-8"), source=md.name, overlap=1)
-        store.add(chunks)
-        n += 1
+        doc_chunks = whole_document(md.read_text(encoding="utf-8"), source=md.name)
+        chunks.extend(doc_chunks)
         if debug:
-            print(f"[setup] indexado {md.name}: {len(chunks)} chunks", file=sys.stderr)
-    print(f"[setup] corpus indexado: {n} arquivos.", file=sys.stderr)
+            print(f"[setup] indexado {md.name} (documento inteiro)", file=sys.stderr)
+    store.add(chunks)
+    print(f"[setup] corpus indexado: {len(chunks)} documentos (1 chunk cada).", file=sys.stderr)
     return store
 
 
